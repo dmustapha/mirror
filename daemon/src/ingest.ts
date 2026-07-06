@@ -122,6 +122,10 @@ export class Ingestor extends EventEmitter {
     // and our own checkpoint txs are recorded directly at send time. A header
     // scan of 15M backfill blocks would cost hours and find nothing.
     if (to - from <= 100) await this.scanBlobTxs(from, to);
+    // DEV-005: persist the cursor after every successful sub-range (bisected
+    // dense regions complete in ascending order) — an overnight crash resumes
+    // at the last finished sub-chunk instead of redoing a whole 500K span.
+    if (to > this.store.lastIndexedBlock) this.store.lastIndexedBlock = to;
   }
 
   private async scanBlobTxs(from: number, to: number): Promise<void> {
