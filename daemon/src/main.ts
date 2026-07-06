@@ -5,6 +5,7 @@ import { Store } from "./store.js";
 import { Ingestor } from "./ingest.js";
 import { BlobSink, CalldataSink, CheckpointEngine } from "./checkpoint.js";
 import { restore } from "./restore.js";
+import { buildApi } from "./api.js";
 import { publicClient } from "./chain.js";
 
 const cmd = process.argv[2] ?? "daemon";
@@ -19,11 +20,6 @@ async function runDaemon(): Promise<void> {
   const engine = new CheckpointEngine(store, sink);
   console.log(`[main] mirrord starting — checkpoint mode: ${sink.mode}, db: ${config.dbPath}`);
 
-  // DEV-004: api.ts lands in Task 4.1 — lazy-load keeps status/restore/wipe
-  // compiling and running before the API module exists. The ignore directive
-  // (deliberately not an expect-error) stays valid once api.ts is created.
-  // @ts-ignore — module created in Task 4.1
-  const { buildApi } = await import("./api.js");
   const app = await buildApi(store, ingestor);
   await app.listen({ port: config.apiPort, host: "0.0.0.0" });
   console.log(`[main] API listening on :${config.apiPort}`);
