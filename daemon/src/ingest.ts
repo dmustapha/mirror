@@ -66,6 +66,25 @@ export class Ingestor extends EventEmitter {
   }
 
   private async indexChunk(from: number, to: number): Promise<void> {
+    // DEV-003: BOT Chain serves >10MB log batches in dense regions; viem's HTTP
+    // transport caps response bodies at 10MB (ResponseBodyTooLargeError). Bisect
+    // the range until it fits — denser regions self-heal, sparse ones stay fast.
+    try {
+      await this.indexChunkRaw(from, to);
+    } catch (err) {
+      const msg = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+      if (to > from && /ResponseBodyTooLarge|size limit/i.test(msg)) {
+        const mid = from + Math.floor((to - from) / 2);
+        console.log(`[ingest] chunk ${from}-${to} exceeds 10MB response cap — splitting at ${mid}`);
+        await this.indexChunk(from, mid);
+        await this.indexChunk(mid + 1, to);
+        return;
+      }
+      throw err;
+    }
+  }
+
+  private async indexChunkRaw(from: number, to: number): Promise<void> {
     const logs = await publicClient.getLogs({
       address: this.trackedAddresses(),
       fromBlock: BigInt(from),
