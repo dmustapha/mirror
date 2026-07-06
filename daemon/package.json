@@ -1,0 +1,33 @@
+{
+  "name": "mirror-daemon",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "daemon": "tsx --env-file=../.env src/main.ts daemon",
+    "restore": "tsx --env-file=../.env src/main.ts restore",
+    "wipe": "tsx --env-file=../.env src/main.ts wipe",
+    "status": "tsx --env-file=../.env src/main.ts status",
+    "spike": "tsx --env-file=../.env scripts/hour0-spike.ts",
+    "demo-pool": "tsx --env-file=../.env scripts/create-demo-pool.ts",
+    "verify-demo": "tsx --env-file=../.env scripts/verify-demo-state.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/rate-limit": "^10.0.0",
+    "@fastify/websocket": "^11.0.0",
+    "better-sqlite3": "^11.10.0",
+    "c-kzg": "^2.1.0",
+    "fastify": "^5.0.0",
+    "viem": "^2.54.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  }
+}
