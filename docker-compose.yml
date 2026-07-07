@@ -1,0 +1,44 @@
+# File: docker-compose.yml
+services:
+  daemon:
+    build: ./daemon
+    # consumes (from .env): RPC_URL, WSS_URL, PRIVATE_KEY, REGISTRY_ADDRESS,
+    # REGISTRY_DEPLOY_BLOCK, DB_PATH, START_BLOCK, INDEX_USDT, CHECKPOINT_MODE
+    # (API_PORT must stay 3400 under compose: mapping + healthchecks hardcode it)
+    ports:
+      - "3400:3400"
+    volumes:
+      # host daemon/data + daemon/submission are the SAME dirs the host-run
+      # daemon uses (module-relative paths) — container and host share state
+      - ./daemon/data:/app/data
+      - ./daemon/submission:/app/submission
+    env_file: .env
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3400/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3400}
+    # consumes: NEXT_PUBLIC_API_URL (build arg, browser-facing), API_URL_INTERNAL (runtime, server components)
+    environment:
+      # server components fetch inside the compose network, not via the host
+      API_URL_INTERNAL: http://daemon:3400
+    ports:
+      - "3401:3401"
+    depends_on:
+      daemon:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3401').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
