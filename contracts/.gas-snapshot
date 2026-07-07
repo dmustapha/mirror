@@ -1,0 +1,8 @@
+MirrorRegistryTest:test_beaconEpochMustMatch() (gas: 16640)
+MirrorRegistryTest:test_beaconReaderConsumesLiveBeacon() (gas: 294088)
+MirrorRegistryTest:test_chainWalk() (gas: 304021)
+MirrorRegistryTest:test_epochMustBeSequential() (gas: 15390)
+MirrorRegistryTest:test_mirrorHead() (gas: 142270)
+MirrorRegistryTest:test_onlyWriter() (gas: 14847)
+MirrorRegistryTest:test_registerAndRead() (gas: 142962)
+MirrorRegistryTest:test_setWriter() (gas: 146716)
