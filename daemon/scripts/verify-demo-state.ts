@@ -6,8 +6,8 @@
 //   4. the API answers /status and lag is sane
 // Exit 0 = safe to record. Any failure = fix the pipeline, never the demo.
 import { existsSync } from "node:fs";
-import { fromBlobs, keccak256, bytesToHex, getAbiItem } from "viem";
-import { writeClient, getBlobsByTxHash } from "../src/chain.js";
+import { keccak256, bytesToHex, getAbiItem } from "viem";
+import { writeClient, getBlobsByTxHash, blobsToBytes } from "../src/chain.js";
 import { registryAbi } from "../src/abi.js";
 import { config } from "../src/config.js";
 import { Store } from "../src/store.js";
@@ -60,7 +60,7 @@ let carrier: `0x${string}` | undefined;
 if (carrier) {
   const blobs = await getBlobsByTxHash(carrier);
   if (blobs) {
-    const payload = fromBlobs({ blobs, to: "bytes" });
+    const payload = blobsToBytes(blobs); // DEV-008
     const hash = keccak256(bytesToHex(payload) as `0x${string}`);
     check("spot contentHash", hash === cp.contentHash, `epoch ${spotEpoch} blob keccak vs chain`);
   } else {
