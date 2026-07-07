@@ -1,6 +1,7 @@
 // File: daemon/src/chain.ts
 import * as cKzgNs from "c-kzg";
 import {
+  hexToBytes,
   createPublicClient,
   createWalletClient,
   defineChain,
@@ -10,7 +11,7 @@ import {
   type Kzg,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { mainnetTrustedSetupPath } from "viem/node";
+import { createRequire } from "node:module";
 import { config } from "./config.js";
 import type { Hex } from "./types.js";
 
@@ -73,7 +74,12 @@ export function getKzg(): Kzg {
   // WARNING: UNVERIFIED PATTERN — c-kzg v2 ESM interop: some versions expose the
   // API on .default. Test immediately at install (spike hour-0 exercises this).
   const cKzg: any = (cKzgNs as any).default ?? cKzgNs;
-  _kzg = setupKzg(cKzg, mainnetTrustedSetupPath);
+  // DEV-007: viem's mainnetTrustedSetupPath resolves into _esm/, which does not
+  // ship the JSON; the real file lives at the package root. Resolve it ourselves.
+  const trustedSetupPath = createRequire(import.meta.url)
+    .resolve("viem/package.json")
+    .replace(/package\.json$/, "trusted-setups/mainnet.json");
+  _kzg = setupKzg(cKzg, trustedSetupPath);
   return _kzg;
 }
 
@@ -107,6 +113,29 @@ export async function getBlobsByTxHash(txHash: Hex): Promise<Hex[] | null> {
     }
   }
   return blobs;
+}
+
+/// DEV-008: viem's fromBlobs terminator scan only inspects the CURRENT blob's
+/// remainder, so any 0x80 data byte in a non-final blob truncates multi-blob
+/// payloads (proven by hour-0 spike: 370,000B -> 126,883B). This decoder
+/// concatenates all field-element payloads first, THEN trims the single real
+/// terminator (last non-zero byte must be 0x80 — toBlobs appends it).
+export function blobsToBytes(blobs: readonly Hex[]): Uint8Array {
+  const out = new Uint8Array(blobs.length * 4096 * 31);
+  let n = 0;
+  for (const blob of blobs) {
+    const b = hexToBytes(blob);
+    for (let fe = 0; fe + 32 <= b.length; fe += 32) {
+      out.set(b.subarray(fe + 1, fe + 32), n);
+      n += 31;
+    }
+  }
+  let end = n;
+  while (end > 0 && out[end - 1] === 0) end--;
+  if (end === 0 || out[end - 1] !== 0x80) {
+    throw new Error("blob payload missing 0x80 terminator — not a toBlobs-packed payload?");
+  }
+  return out.subarray(0, end - 1);
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

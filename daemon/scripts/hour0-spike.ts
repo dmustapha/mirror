@@ -4,8 +4,8 @@
 // read-back → seed submission/proof.md → print MODE LOCK.
 // Exit code 0 = blob mode locked. Exit code 2 = promote CalldataSink.
 import { writeFileSync, mkdirSync } from "node:fs";
-import { toBlobs, fromBlobs, bytesToHex, hexToBytes } from "viem";
-import { writeClient, getWalletClient, getKzg, getBlobsByTxHash, sleep } from "../src/chain.js";
+import { toBlobs, bytesToHex } from "viem";
+import { writeClient, getWalletClient, getKzg, getBlobsByTxHash, blobsToBytes, sleep } from "../src/chain.js";
 import { config } from "../src/config.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
@@ -40,7 +40,7 @@ async function roundTrip(label: string, payload: Uint8Array): Promise<`0x${strin
     if (!blobsBack) await sleep(1_000);
   }
   assert(blobsBack !== null, `${label}: eth_getBlobSidecarByTxHash returned null for mined tx`);
-  const roundTripped = fromBlobs({ blobs: blobsBack, to: "bytes" });
+  const roundTripped = blobsToBytes(blobsBack); // DEV-008: viem fromBlobs truncates multi-blob
   const match =
     roundTripped.length >= payload.length &&
     Buffer.compare(Buffer.from(roundTripped.subarray(0, payload.length)), Buffer.from(payload)) === 0;

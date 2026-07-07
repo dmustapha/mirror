@@ -2,8 +2,8 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fromBlobs, hexToBytes, decodeFunctionData, getAbiItem } from "viem";
-import { publicClient, writeClient, getBlobsByTxHash, sleep } from "./chain.js";
+import { hexToBytes, decodeFunctionData, getAbiItem } from "viem";
+import { publicClient, writeClient, getBlobsByTxHash, blobsToBytes, sleep } from "./chain.js";
 import { registryAbi } from "./abi.js";
 import { decodeEnvelope, contentHashOf } from "./codec.js";
 import { config } from "./config.js";
@@ -200,7 +200,7 @@ async function fetchPayload(
 ): Promise<{ bytes: Uint8Array; source: "blob" | "calldata-mirror" }> {
   const blobs = await getBlobsByTxHash(txHash);
   if (blobs) {
-    return { bytes: fromBlobs({ blobs, to: "bytes" }), source: "blob" };
+    return { bytes: blobsToBytes(blobs), source: "blob" }; // DEV-008
   }
   const mirror = await findMirrorPayload(epoch, expectedHash);
   if (mirror) return { bytes: mirror, source: "calldata-mirror" };
