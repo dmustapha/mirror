@@ -15,6 +15,24 @@ import type {
 
 const PROOF_PATH = fileURLToPath(new URL("../submission/proof.md", import.meta.url));
 
+/// DEV-010: the restore is a minutes-long, demo-critical network path — transient
+/// RPC failures (DNS blips, timeouts; observed live: ENOTFOUND rpc.bohr.life
+/// mid-drill) must not kill it. Retry with backoff before any fallback/failure.
+async function withRetry<T>(label: string, fn: () => Promise<T>, attempts = 5): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const wait = 2_000 * 2 ** i;
+      console.warn(`[restore] ${label} failed (attempt ${i + 1}/${attempts}) — retrying in ${wait / 1000}s`);
+      await sleep(wait);
+    }
+  }
+  throw lastErr;
+}
+
 interface ChainNode {
   epoch: number;
   kind: number;
@@ -56,12 +74,14 @@ export async function restore(
   //    Superseded HEADs are naturally skipped (nothing points at them).
   const chain: ChainNode[] = [];
   for (let e = latestEpoch; e !== 0; ) {
-    const cp = await writeClient.readContract({
-      address: config.registryAddress,
-      abi: registryAbi,
-      functionName: "checkpoints",
-      args: [BigInt(e)],
-    });
+    const cp = await withRetry(`checkpoint(${e}) read`, () =>
+      writeClient.readContract({
+        address: config.registryAddress,
+        abi: registryAbi,
+        functionName: "checkpoints",
+        args: [BigInt(e)],
+      })
+    );
     chain.push({
       epoch: e,
       kind: Number(cp.kind),
@@ -83,7 +103,9 @@ export async function restore(
   for (const node of chain) {
     const loc = epochTx.get(node.epoch);
     if (!loc) throw new Error(`no CheckpointRegistered event for epoch ${node.epoch}`);
-    const { bytes, source } = await fetchPayload(node.epoch, loc.txHash, node.contentHash);
+    const { bytes, source } = await withRetry(`epoch ${node.epoch} payload fetch`, () =>
+      fetchPayload(node.epoch, loc.txHash, node.contentHash)
+    );
     const computed = contentHashOf(bytes);
     if (computed !== node.contentHash) {
       throw new Error(
@@ -121,7 +143,9 @@ export async function restore(
     // its own blockTo, so no envelope carries it). blobGasUsed is exact per
     // EIP-4844: blobCount * 2^17.
     if (source === "blob") {
-      const tx = await writeClient.getTransaction({ hash: loc.txHash });
+      const tx = await withRetry(`tx(${loc.txHash.slice(0, 10)}…) read`, () =>
+        writeClient.getTransaction({ hash: loc.txHash })
+      );
       const nBlobs = tx.blobVersionedHashes?.length ?? node.blobCount;
       store.insertBlobTxs([{
         txHash: loc.txHash,
