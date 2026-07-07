@@ -7,7 +7,7 @@
 // Exit 0 = safe to record. Any failure = fix the pipeline, never the demo.
 import { existsSync } from "node:fs";
 import { fromBlobs, keccak256, bytesToHex, getAbiItem } from "viem";
-import { publicClient, getBlobsByTxHash } from "../src/chain.js";
+import { writeClient, getBlobsByTxHash } from "../src/chain.js";
 import { registryAbi } from "../src/abi.js";
 import { config } from "../src/config.js";
 import { Store } from "../src/store.js";
@@ -26,7 +26,7 @@ const check = (name: string, ok: boolean, detail: string) => {
 };
 
 // 1. on-chain checkpoint count
-const beacon = await publicClient.readContract({
+const beacon = await writeClient.readContract({
   address: config.registryAddress, abi: registryAbi, functionName: "beacon",
 });
 const latestEpoch = Number(beacon.latestEpoch);
@@ -35,7 +35,7 @@ check("on-chain epochs", latestEpoch >= MIN_EPOCHS, `latestEpoch=${latestEpoch} 
 // 2. spot-verify one mid-chain epoch: blob payload vs on-chain contentHash.
 //    Epoch choice is derived from the head (deterministic, not cherry-picked).
 const spotEpoch = Math.max(1, Math.floor(latestEpoch / 2));
-const cp = await publicClient.readContract({
+const cp = await writeClient.readContract({
   address: config.registryAddress, abi: registryAbi, functionName: "checkpoints",
   args: [BigInt(spotEpoch)],
 });
@@ -44,10 +44,10 @@ const cp = await publicClient.readContract({
 // a sidecar-less tx and false-FAIL).
 let carrier: `0x${string}` | undefined;
 {
-  const latestBlock = Number(await publicClient.getBlockNumber());
+  const latestBlock = Number(await writeClient.getBlockNumber());
   for (let from = config.registryDeployBlock; from <= latestBlock && !carrier; from += config.backfillChunkBlocks) {
     const to = Math.min(from + config.backfillChunkBlocks - 1, latestBlock);
-    const logs = await publicClient.getLogs({
+    const logs = await writeClient.getLogs({
       address: config.registryAddress,
       event: getAbiItem({ abi: registryAbi, name: "CheckpointRegistered" }),
       args: { epoch: BigInt(spotEpoch) },

@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fromBlobs, hexToBytes, decodeFunctionData, getAbiItem } from "viem";
-import { publicClient, getBlobsByTxHash, sleep } from "./chain.js";
+import { publicClient, writeClient, getBlobsByTxHash, sleep } from "./chain.js";
 import { registryAbi } from "./abi.js";
 import { decodeEnvelope, contentHashOf } from "./codec.js";
 import { config } from "./config.js";
@@ -37,7 +37,7 @@ export async function restore(
   const t0 = Date.now();
 
   // 1. Registry head: which epoch is live?
-  const beacon = await publicClient.readContract({
+  const beacon = await writeClient.readContract({
     address: config.registryAddress,
     abi: registryAbi,
     functionName: "beacon",
@@ -56,7 +56,7 @@ export async function restore(
   //    Superseded HEADs are naturally skipped (nothing points at them).
   const chain: ChainNode[] = [];
   for (let e = latestEpoch; e !== 0; ) {
-    const cp = await publicClient.readContract({
+    const cp = await writeClient.readContract({
       address: config.registryAddress,
       abi: registryAbi,
       functionName: "checkpoints",
@@ -121,7 +121,7 @@ export async function restore(
     // its own blockTo, so no envelope carries it). blobGasUsed is exact per
     // EIP-4844: blobCount * 2^17.
     if (source === "blob") {
-      const tx = await publicClient.getTransaction({ hash: loc.txHash });
+      const tx = await writeClient.getTransaction({ hash: loc.txHash });
       const nBlobs = tx.blobVersionedHashes?.length ?? node.blobCount;
       store.insertBlobTxs([{
         txHash: loc.txHash,
@@ -171,10 +171,10 @@ export async function restore(
 /// tx hash + block of the checkpoint that registered it.
 async function scanCheckpointTxs(): Promise<Map<number, { txHash: Hex; block: number }>> {
   const out = new Map<number, { txHash: Hex; block: number }>();
-  const latest = Number(await publicClient.getBlockNumber());
+  const latest = Number(await writeClient.getBlockNumber()); // DEV-006: registry lives on the write chain
   for (let from = config.registryDeployBlock; from <= latest; from += config.backfillChunkBlocks) {
     const to = Math.min(from + config.backfillChunkBlocks - 1, latest);
-    const logs = await publicClient.getLogs({
+    const logs = await writeClient.getLogs({
       address: config.registryAddress,
       event: getAbiItem({ abi: registryAbi, name: "CheckpointRegistered" }),
       fromBlock: BigInt(from),
@@ -210,10 +210,10 @@ async function fetchPayload(
 /// HeadMirrored(epoch) event → carrying tx → decode mirrorHead calldata →
 /// payload bytes. Also covers CalldataSink-mode checkpoints.
 async function findMirrorPayload(epoch: number, expectedHash: Hex): Promise<Uint8Array | null> {
-  const latest = Number(await publicClient.getBlockNumber());
+  const latest = Number(await writeClient.getBlockNumber());
   for (let from = config.registryDeployBlock; from <= latest; from += config.backfillChunkBlocks) {
     const to = Math.min(from + config.backfillChunkBlocks - 1, latest);
-    const logs = await publicClient.getLogs({
+    const logs = await writeClient.getLogs({
       address: config.registryAddress,
       event: getAbiItem({ abi: registryAbi, name: "HeadMirrored" }),
       args: { epoch: BigInt(epoch) },
@@ -221,7 +221,7 @@ async function findMirrorPayload(epoch: number, expectedHash: Hex): Promise<Uint
       toBlock: BigInt(to),
     });
     if (logs.length === 0) continue;
-    const tx = await publicClient.getTransaction({ hash: logs[logs.length - 1].transactionHash });
+    const tx = await writeClient.getTransaction({ hash: logs[logs.length - 1].transactionHash });
     const decoded = decodeFunctionData({ abi: registryAbi, data: tx.input });
     if (decoded.functionName !== "mirrorHead") continue;
     const [, hash, payload] = decoded.args as [bigint, Hex, Hex];
