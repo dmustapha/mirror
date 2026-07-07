@@ -5,7 +5,7 @@
 // Exit code 0 = blob mode locked. Exit code 2 = promote CalldataSink.
 import { writeFileSync, mkdirSync } from "node:fs";
 import { toBlobs, fromBlobs, bytesToHex, hexToBytes } from "viem";
-import { publicClient, getWalletClient, getKzg, getBlobsByTxHash, sleep } from "../src/chain.js";
+import { writeClient, getWalletClient, getKzg, getBlobsByTxHash, sleep } from "../src/chain.js";
 import { config } from "../src/config.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
@@ -25,7 +25,7 @@ async function roundTrip(label: string, payload: Uint8Array): Promise<`0x${strin
     maxPriorityFeePerGas: config.maxPriorityFeePerGas,
   });
   console.log(`[spike] ${label}: tx ${hash} — waiting for inclusion (120s timeout)...`);
-  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
+  const receipt = await writeClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
   assert(receipt.status === "success", `${label} tx reverted`);
   assert((receipt.blobGasUsed ?? 0n) > 0n, `${label} receipt has no blobGasUsed`);
   console.log(
@@ -51,13 +51,13 @@ async function roundTrip(label: string, payload: Uint8Array): Promise<`0x${strin
 
 // --- 0. balance + fee re-confirm ---
 const wallet = getWalletClient();
-const balance = await publicClient.getBalance({ address: wallet.account.address });
+const balance = await writeClient.getBalance({ address: wallet.account.address });
 console.log(`[spike] wallet ${wallet.account.address} balance ${Number(balance) / 1e18} BOT`);
 assert(balance > 10n ** 16n, "need ≥0.01 BOT for the spike");
-const gasPrice = await publicClient.getGasPrice();
-const blobBaseFee = await publicClient
+const gasPrice = await writeClient.getGasPrice();
+const blobBaseFee = await writeClient
   .request({ method: "eth_blobBaseFee" as never, params: [] as never })
-  .then((v) => BigInt(v as string))
+  .then((v: unknown) => BigInt(v as string))
   .catch(() => null); // method missing on the fork = non-fatal (fee is pinned in config)
 console.log(
   `[spike] gasPrice ${Number(gasPrice) / 1e9} gwei (floor is 47.62), blobBaseFee ${blobBaseFee ?? "unavailable"} wei`
@@ -83,8 +83,8 @@ try {
       ``,
       `## First blob transactions on BOT Chain (hour-0 spike, ${new Date().toISOString()})`,
       ``,
-      `- 1-blob probe: [\`${h1}\`](${config.explorerBase}/tx/${h1})`,
-      `- 3-blob probe: [\`${h3}\`](${config.explorerBase}/tx/${h3})`,
+      `- 1-blob probe: [\`${h1}\`](${config.writeExplorerBase}/tx/${h1})`,
+      `- 3-blob probe: [\`${h3}\`](${config.writeExplorerBase}/tx/${h3})`,
       ``,
       `## Checkpoints`,
       ``,

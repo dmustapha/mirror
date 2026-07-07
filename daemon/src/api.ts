@@ -4,12 +4,12 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import type { WebSocket } from "@fastify/websocket";
-import { publicClient } from "./chain.js";
+import { publicClient, writeClient } from "./chain.js";
 import { registryAbi } from "./abi.js";
 import { config } from "./config.js";
 import { Store } from "./store.js";
 import { Ingestor, resolveSwapTxHashes } from "./ingest.js";
-import { explorerTx, explorerAddr } from "./decode.js";
+import { explorerTx, explorerTxWrite, explorerAddr } from "./decode.js";
 import type { Hex, SwapRow } from "./types.js";
 
 const INTERVALS: Record<string, number> = {
@@ -59,7 +59,7 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
     const head = store.checkpointsList(1)[0];
     if (head && head.epoch > lastSeenEpoch) {
       lastSeenEpoch = head.epoch;
-      broadcast({ type: "checkpoint", data: { ...head, txUrl: head.txHash ? explorerTx(head.txHash) : null } });
+      broadcast({ type: "checkpoint", data: { ...head, txUrl: head.txHash ? explorerTxWrite(head.txHash) : null } });
     }
   }, 3_000);
   app.addHook("onClose", async () => clearInterval(cpPoll));
@@ -134,7 +134,7 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
     store.checkpointsList(200).map((c) => ({
       ...c,
       kindName: c.kind === 0 ? "SEGMENT" : "HEAD",
-      txUrl: c.txHash ? explorerTx(c.txHash) : null,
+      txUrl: c.txHash ? explorerTxWrite(c.txHash) : null, // DEV-006
     }))
   );
 
@@ -143,7 +143,7 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
   /// comparison on the dashboard.
   app.get("/beacon", async (_req, reply) => {
     if (!config.registryAddress) return reply.code(503).send({ error: "registry not deployed yet" });
-    const b = await publicClient.readContract({
+    const b = await writeClient.readContract({
       address: config.registryAddress, abi: registryAbi, functionName: "beacon",
     });
     const local = store.aggregates24h(config.mainPool.toLowerCase() as Hex, store.lastIndexedBlock);
@@ -162,7 +162,7 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
         lastIndexedBlock: store.lastIndexedBlock,
       },
       registry: config.registryAddress,
-      registryUrl: explorerAddr(config.registryAddress),
+      registryUrl: `${config.writeExplorerBase}/address/${config.registryAddress}`, // DEV-006: registry lives on the write chain
     };
   });
 
@@ -170,9 +170,12 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
   /// which, on BOT Chain, is Mirror's own checkpoints.
   app.get("/blobs", async () => {
     const head = store.lastIndexedBlock;
+    const reg = config.registryAddress.toLowerCase();
     return store.blobTxsInRange(0, head + 1_000).map((b) => ({
       ...b,
-      txUrl: explorerTx(b.txHash),
+      // DEV-006: our checkpoint blob txs live on the write chain; anything else
+      // (none in mainnet history, measured) is a read-chain tx.
+      txUrl: b.to === reg && reg ? explorerTxWrite(b.txHash) : explorerTx(b.txHash),
     }));
   });
 
@@ -206,7 +209,7 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
         rows: c.rowCount,
         contentHash: c.contentHash,
         txHash: c.txHash,
-        txUrl: c.txHash ? explorerTx(c.txHash) : null,
+        txUrl: c.txHash ? explorerTxWrite(c.txHash) : null, // DEV-006
       })),
       reproduce:
         "docker compose up --build -d  # hero flow: docker compose stop daemon && docker compose run --rm daemon npx tsx src/main.ts wipe && docker compose run --rm daemon npx tsx src/main.ts restore && docker compose start daemon",

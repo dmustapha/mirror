@@ -33,6 +33,21 @@ export const publicClient = createPublicClient({
   transport: http(config.rpcUrl, { timeout: 60_000, retryCount: 3, retryDelay: 2_000 }),
 });
 
+// DEV-006: WRITE chain (registry, checkpoints, blob sidecars) — testnet 968 by
+// default. All DEX-data reads stay on the mainnet publicClient above.
+export const botChainWrite = defineChain({
+  id: config.writeChainId,
+  name: "BOT Chain (write)",
+  nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
+  rpcUrls: { default: { http: [config.writeRpcUrl] } },
+  blockExplorers: { default: { name: "BOT Chain Explorer", url: config.writeExplorerBase } },
+});
+
+export const writeClient = createPublicClient({
+  chain: botChainWrite,
+  transport: http(config.writeRpcUrl, { timeout: 60_000, retryCount: 3, retryDelay: 2_000 }),
+});
+
 // WSS client is used ONLY as a low-latency nudge (newHeads). Correctness never
 // depends on it — the cursor loop is authoritative (AF-10: WSS can die silently).
 export function makeWsClient() {
@@ -47,8 +62,8 @@ export function getWalletClient() {
   const account = privateKeyToAccount(config.privateKey);
   return createWalletClient({
     account,
-    chain: botChain,
-    transport: http(config.rpcUrl, { timeout: 120_000, retryCount: 2, retryDelay: 3_000 }),
+    chain: botChainWrite, // DEV-006: sends go to the write chain
+    transport: http(config.writeRpcUrl, { timeout: 120_000, retryCount: 2, retryDelay: 3_000 }),
   });
 }
 
@@ -77,7 +92,7 @@ const FULL_BLOB_HEX_LEN = 2 + 131_072 * 2; // 0x + 262144 chars
 /// Defensive: asserts full-length blobs (fullBlob=false silently truncates to 32B)
 /// and tolerates both nested (blobSidecar.blobs) and flat (blobs) wrapper shapes.
 export async function getBlobsByTxHash(txHash: Hex): Promise<Hex[] | null> {
-  const res = (await publicClient.request({
+  const res = (await writeClient.request({
     method: "eth_getBlobSidecarByTxHash" as never,
     params: [txHash, true] as never,
   })) as unknown as (SidecarResult & { blobs?: Hex[] }) | null;

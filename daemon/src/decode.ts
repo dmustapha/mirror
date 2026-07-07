@@ -113,6 +113,10 @@ export function estTs(block: number, anchor: { block: number; ts: number }): num
 export function explorerTx(hash: string): string {
   return `${config.explorerBase}/tx/${hash}`;
 }
+/// DEV-006: checkpoint/registry txs live on the WRITE chain — separate explorer.
+export function explorerTxWrite(hash: string): string {
+  return `${config.writeExplorerBase}/tx/${hash}`;
+}
 export function explorerAddr(addr: string): string {
   return `${config.explorerBase}/address/${addr}`;
 }

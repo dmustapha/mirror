@@ -20,6 +20,13 @@ export const config = {
   registryAddress: (process.env.REGISTRY_ADDRESS ?? "") as Hex, // set after Deploy.s.sol
   registryDeployBlock: Number(process.env.REGISTRY_DEPLOY_BLOCK ?? "0"), // set after deploy
 
+  // --- write side (registry + checkpoints). DEV-006: testnet 968 by default —
+  //     the $0 faucet path; officially qualifies per hackathon FAQ. Flip these
+  //     three env vars to mainnet if gas lands. READ side (DEX data) stays 677.
+  writeRpcUrl: env("WRITE_RPC_URL", "https://rpc.bohr.life"),
+  writeChainId: Number(process.env.WRITE_CHAIN_ID ?? "968"),
+  writeExplorerBase: env("WRITE_EXPLORER_BASE", "https://scan.botchain.ai"), // BOTScan-testnet URL set via env once located
+
   // --- known contracts (mainnet 677, official integration guide; probed 2026-07-05) ---
   wbot: "0xD5452816194a3784dBa983426cCe7c122F4abd30" as Hex,
   usdt: "0xaBabc7Ddc03e501d190C676BF3d92ef0e6e87a3C" as Hex, // 6 decimals

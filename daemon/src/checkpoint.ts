@@ -3,12 +3,12 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { toBlobs, bytesToHex, encodeFunctionData } from "viem";
-import { publicClient, getWalletClient, getKzg } from "./chain.js";
+import { writeClient, getWalletClient, getKzg } from "./chain.js";
 import { registryAbi } from "./abi.js";
 import { encodeEnvelope, contentHashOf } from "./codec.js";
 import { config } from "./config.js";
 import { Store } from "./store.js";
-import { explorerTx } from "./decode.js";
+import { explorerTxWrite } from "./decode.js";
 import type {
   BeaconState, CheckpointKind, CheckpointMeta, Envelope, Hex,
 } from "./types.js";
@@ -116,7 +116,7 @@ export class BlobSink implements CheckpointSink {
       maxFeePerGas: config.maxFeePerGas,
       maxPriorityFeePerGas: config.maxPriorityFeePerGas,
     });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
+    const receipt = await writeClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
     if (receipt.status !== "success") throw new Error(`checkpoint tx reverted: ${hash}`);
     return { txHash: hash, block: Number(receipt.blockNumber) };
   }
@@ -144,7 +144,7 @@ export class CalldataSink implements CheckpointSink {
       data: registerData(cp, beacon),
       ...feeOpts,
     });
-    const regReceipt = await publicClient.waitForTransactionReceipt({ hash: regHash, timeout: 120_000 });
+    const regReceipt = await writeClient.waitForTransactionReceipt({ hash: regHash, timeout: 120_000 });
     if (regReceipt.status !== "success") throw new Error(`register tx reverted: ${regHash}`);
 
     const hash = await wallet.sendTransaction({
@@ -156,7 +156,7 @@ export class CalldataSink implements CheckpointSink {
       }),
       ...feeOpts,
     });
-    const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
+    const receipt = await writeClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
     if (receipt.status !== "success") throw new Error(`mirror tx reverted: ${hash}`);
     return { txHash: hash, block: Number(receipt.blockNumber) };
   }
@@ -212,14 +212,14 @@ export class CheckpointEngine {
   /// would reject with BadEpoch.
   private async syncWithChain(): Promise<void> {
     const chainLatest = Number(
-      await publicClient.readContract({
+      await writeClient.readContract({
         address: config.registryAddress,
         abi: registryAbi,
         functionName: "latestEpoch",
       })
     );
     if (chainLatest + 1 > this.nextEpoch) {
-      const cp = await publicClient.readContract({
+      const cp = await writeClient.readContract({
         address: config.registryAddress,
         abi: registryAbi,
         functionName: "checkpoints",
@@ -361,7 +361,7 @@ export class CheckpointEngine {
       maxFeePerGas: config.maxFeePerGas,
       maxPriorityFeePerGas: config.maxPriorityFeePerGas,
     });
-    await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
+    await writeClient.waitForTransactionReceipt({ hash, timeout: 120_000 });
     console.log(`[checkpoint] calldata mirror of epoch ${cp.epoch} → ${hash}`);
   }
 }
@@ -374,6 +374,6 @@ function appendProofLine(cp: CheckpointMeta, mode: string): void {
   const kind = cp.kind === 0 ? "SEGMENT" : "HEAD";
   appendFileSync(
     PROOF_PATH,
-    `| ${cp.epoch} | ${kind} | ${cp.blockFrom}-${cp.blockTo} | ${cp.rowCount} | ${mode} | [\`${cp.txHash}\`](${explorerTx(cp.txHash!)}) |\n`
+    `| ${cp.epoch} | ${kind} | ${cp.blockFrom}-${cp.blockTo} | ${cp.rowCount} | ${mode} | [\`${cp.txHash}\`](${explorerTxWrite(cp.txHash!)}) |\n`
   );
 }

@@ -32,7 +32,7 @@ export default async function IntegrationsPage() {
 
   const rows: { name: string; ok: boolean; detail: ReactNode }[] = [
     {
-      name: "MirrorRegistry deployed on BOT Chain mainnet (677)",
+      name: "MirrorRegistry deployed on BOT Chain (testnet 968, faucet-funded — mainnet flip is one env var)",
       ok: !!beacon,
       detail: beacon ? (
         <a href={beacon.registryUrl} target="_blank" rel="noreferrer" className="mono">{beacon.registry}</a>
