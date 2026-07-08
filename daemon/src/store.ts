@@ -232,7 +232,13 @@ export class Store {
   counts() {
     const c = (t: string) =>
       (this.db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as { n: number }).n;
-    return { swaps: c("swaps"), transfers: c("transfers"), pools: c("pools"),
+    // swaps/transfers are INSERT OR IGNORE append-only (no per-row deletes,
+    // wipe drops the whole file), so MAX(rowid) == COUNT(*) — O(1) instead of
+    // a ~4s index scan at 3M rows that blocked the event loop on every poll.
+    // checkpoints uses INSERT OR REPLACE (rowid gaps possible) → real COUNT.
+    const m = (t: string) =>
+      (this.db.prepare(`SELECT COALESCE(MAX(rowid),0) AS n FROM ${t}`).get() as { n: number }).n;
+    return { swaps: m("swaps"), transfers: m("transfers"), pools: c("pools"),
       blobTxs: c("blob_txs"), checkpoints: c("checkpoints") };
   }
   fileInfo(path: string = config.dbPath): { bytes: number } {

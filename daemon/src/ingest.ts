@@ -13,6 +13,9 @@ import type { Hex, SwapRow, BlobTxRow } from "./types.js";
 export class Ingestor extends EventEmitter {
   store: Store;
   poolTokens = new Map<string, { token0: Hex; token1: Hex }>();
+  /// Chain head as of the last tick — lets /status answer without a live RPC
+  /// round trip (public RPC latency was 4-5s, freezing every dashboard poll).
+  lastSeenChainHead = 0;
   private nudgeFn: (() => void) | null = null;
   private running = false;
 
@@ -170,6 +173,7 @@ export class Ingestor extends EventEmitter {
     while (this.running) {
       try {
         const latest = Number(await publicClient.getBlockNumber());
+        this.lastSeenChainHead = latest;
         const safeHead = latest - config.confirmations;
         if (safeHead > this.store.lastIndexedBlock) {
           const from = this.store.lastIndexedBlock + 1;
