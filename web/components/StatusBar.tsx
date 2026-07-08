@@ -1,7 +1,7 @@
-// File: web/components/StatusBar.tsx
+// File: web/components/StatusBar.tsx — compact nav pill (Signal Bento)
 "use client";
 import { useEffect, useState } from "react";
-import { api, fmt, type StatusInfo, type CheckpointInfo } from "@/lib/api";
+import { api, type StatusInfo, type CheckpointInfo } from "@/lib/api";
 
 export default function StatusBar() {
   const [status, setStatus] = useState<StatusInfo | null>(null);
@@ -22,17 +22,14 @@ export default function StatusBar() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  if (!status) return <div className="statusbar" style={{ padding: "10px 20px" }}>connecting to mirrord…</div>;
+  if (!status) return <div className="statusbar">connecting…</div>;
   return (
-    <div className="statusbar" style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)" }}>
-      <span>indexed <b>{status.lastIndexedBlock.toLocaleString()}</b>{status.lagBlocks !== null && ` (lag ${status.lagBlocks})`}</span>
+    <div className="statusbar">
+      <span>block <b>{status.lastIndexedBlock.toLocaleString()}</b>{status.lagBlocks !== null && ` · lag ${status.lagBlocks}`}</span>
       <span><b>{status.counts.swaps.toLocaleString()}</b> swaps</span>
-      <span>db <b>{fmt.bytes(status.dbBytes)}</b></span>
-      <span><b>{status.counts.checkpoints}</b> checkpoints on-chain</span>
+      <span><b>{status.counts.checkpoints}</b> checkpoints</span>
       {head?.txUrl && (
-        <span>latest: <a href={head.txUrl} target="_blank" rel="noreferrer" className="mono">
-          epoch {head.epoch} → {fmt.addr(head.txHash!)}
-        </a></span>
+        <a href={head.txUrl} target="_blank" rel="noreferrer">epoch {head.epoch} ↗</a>
       )}
     </div>
   );

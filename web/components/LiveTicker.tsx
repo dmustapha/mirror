@@ -1,4 +1,4 @@
-// File: web/components/LiveTicker.tsx
+// File: web/components/LiveTicker.tsx — chip-style live feed (Signal Bento)
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { WS_URL, fmt } from "@/lib/api";
@@ -19,7 +19,7 @@ export default function LiveTicker() {
       ws.onmessage = (ev) => {
         const msg = JSON.parse(ev.data as string) as FeedItem;
         msg.at = seq.current++;
-        setItems((prev) => [msg, ...prev].slice(0, 30));
+        setItems((prev) => [msg, ...prev].slice(0, 14));
       };
       ws.onclose = () => {
         if (!closed) timer = setTimeout(connect, 3_000);
@@ -34,15 +34,15 @@ export default function LiveTicker() {
   }, []);
 
   return (
-    <div className="panel">
-      {items.length === 0 && <span className="sub">waiting for swaps…</span>}
+    <div className="feed">
+      {items.length === 0 && <div className="check sub">listening for swaps…</div>}
       {items.map((it) => (
         <div className="check" key={it.at}>
           {it.type === "checkpoint" ? (
             <>
-              <span className="badge head">CHECKPOINT</span>
+              <span className="chip cp">Checkpoint</span>
               <span>
-                epoch {String(it.data.epoch)} written to BOT Chain —{" "}
+                epoch {String(it.data.epoch)} →{" "}
                 <a href={String(it.data.txUrl)} target="_blank" rel="noreferrer" className="mono">
                   {fmt.addr(String(it.data.txHash))}
                 </a>
@@ -50,9 +50,9 @@ export default function LiveTicker() {
             </>
           ) : (
             <>
-              <span className={Number(it.data.priceUsdt) > 0 ? "pos" : ""}>SWAP</span>
+              <span className="chip">Swap</span>
               <span className="mono">
-                {fmt.addr(String(it.data.pool))} @ {fmt.price(Number(it.data.priceUsdt))} USDT{" "}
+                {fmt.addr(String(it.data.pool))} @ {fmt.price(Number(it.data.priceUsdt))}{" "}
                 {it.data.txUrl ? <a href={String(it.data.txUrl)} target="_blank" rel="noreferrer">tx↗</a> : null}
               </span>
             </>
