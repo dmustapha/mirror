@@ -10,32 +10,33 @@ export default function CandleChart({ addr }: { addr: string }) {
   const el = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const [interval_, setInterval_] = useState<(typeof INTERVALS)[number]>("1h");
+  const [empty, setEmpty] = useState(false);
 
   useEffect(() => {
     if (!el.current) return;
     chart.current = createChart(el.current, {
       autoSize: true,
       height: 360,
-      layout: { background: { color: "#131722" }, textColor: "#8a94ab" },
-      grid: { vertLines: { color: "#1c2330" }, horzLines: { color: "#1c2330" } },
+      layout: { background: { color: "#141824" }, textColor: "#7d8598" },
+      grid: { vertLines: { color: "#1c2130" }, horzLines: { color: "#1c2130" } },
       timeScale: { timeVisible: true },
     });
     const series = chart.current.addCandlestickSeries({
-      upColor: "#3fb68b", downColor: "#e0555d",
-      wickUpColor: "#3fb68b", wickDownColor: "#e0555d", borderVisible: false,
+      upColor: "#d6ff3f", downColor: "#ff5470",
+      wickUpColor: "#d6ff3f", wickDownColor: "#ff5470", borderVisible: false,
     });
     let alive = true;
     const load = () =>
       void api.ohlcv(addr, interval_).then((rows) => {
         if (!alive) return;
-        series.setData(
-          rows
-            .filter((r) => r.open > 0)
-            .map((r) => ({
-              time: r.time as UTCTimestamp,
-              open: r.open, high: r.high, low: r.low, close: r.close,
-            }))
-        );
+        const candles = rows
+          .filter((r) => r.open > 0)
+          .map((r) => ({
+            time: r.time as UTCTimestamp,
+            open: r.open, high: r.high, low: r.low, close: r.close,
+          }));
+        setEmpty(candles.length === 0);
+        series.setData(candles);
       }).catch(() => {});
     load();
     const t = setInterval(load, 10_000);
@@ -49,17 +50,23 @@ export default function CandleChart({ addr }: { addr: string }) {
           <button
             key={iv}
             onClick={() => setInterval_(iv)}
-            style={{
-              background: iv === interval_ ? "var(--accent)" : "var(--panel)",
-              color: iv === interval_ ? "#0b0e14" : "var(--muted)",
-              border: "1px solid var(--border)", borderRadius: 4, padding: "3px 10px", cursor: "pointer",
-            }}
+            className={`ivbtn${iv === interval_ ? " active" : ""}`}
           >
             {iv}
           </button>
         ))}
       </div>
-      <div ref={el} />
+      <div style={{ position: "relative" }}>
+        <div ref={el} />
+        {empty && (
+          <div className="sub" style={{
+            position: "absolute", inset: 0, display: "flex", zIndex: 3, pointerEvents: "none",
+            alignItems: "center", justifyContent: "center", textAlign: "center",
+          }}>
+            No USDT-priced trades in this window yet — recent swaps below still verify on-chain.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
