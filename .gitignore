@@ -5,3 +5,18 @@ data/
 dist/
 contracts/out/
 contracts/cache/
+
+# Local
+DOMAIN-GUIDE.md
+*.log
+.DS_Store
+.env.local
+.env*.local
+web/tsconfig.tsbuildinfo
+web/next-env.d.ts
+.deploy-state.json
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
