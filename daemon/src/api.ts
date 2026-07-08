@@ -181,7 +181,9 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
   });
 
   app.get("/status", async () => {
-    const latest = Number(await publicClient.getBlockNumber().catch(() => 0n));
+    // Cached by the ingest tick; live fallback only before the first tick.
+    const latest = ingestor.lastSeenChainHead ||
+      Number(await publicClient.getBlockNumber().catch(() => 0n));
     const counts = store.counts();
     return {
       chainId: config.chainId,
