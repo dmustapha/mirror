@@ -98,14 +98,41 @@ export async function restore(
   console.log(`[restore] checkpoint chain: ${chain.length} epochs (${chain[0].blockFrom} → ${chain[chain.length - 1].blockTo})`);
 
   // 4. Pull, verify, decode, insert — printing each tx hash as it is fetched.
+  //    DEV-011: payload fetches are the wall clock (measured 39.5 min serial for
+  //    207 epochs — ~11.5s/epoch of sidecar JSON). Prefetch a sliding window of
+  //    RESTORE_CONCURRENCY epochs; verification/apply stays sequential and
+  //    ordered, so the trust model is unchanged.
+  const CONCURRENCY = Number(process.env.RESTORE_CONCURRENCY ?? "6");
+  type Fetched = { bytes: Uint8Array; source: "blob" | "calldata-mirror"; txFrom: Hex | null; txBlobs: number };
+  const fetches = new Map<number, Promise<Fetched>>();
+  const startFetch = (idx: number) => {
+    if (idx >= chain.length || fetches.has(idx)) return;
+    const n = chain[idx];
+    const l = epochTx.get(n.epoch);
+    if (!l) return; // surfaces as a clear error at the await site
+    fetches.set(idx, withRetry(`epoch ${n.epoch} payload fetch`, async () => {
+      const { bytes, source } = await fetchPayload(n.epoch, l.txHash, n.contentHash);
+      let txFrom: Hex | null = null;
+      let txBlobs = n.blobCount;
+      if (source === "blob") {
+        const tx = await writeClient.getTransaction({ hash: l.txHash });
+        txFrom = tx.from.toLowerCase() as Hex;
+        txBlobs = tx.blobVersionedHashes?.length ?? n.blobCount;
+      }
+      return { bytes, source, txFrom, txBlobs };
+    }));
+  };
+  for (let i = 0; i < Math.min(CONCURRENCY, chain.length); i++) startFetch(i);
+
   const store = new Store(dbPath);
   const report: RestoreReport = { epochs: [], rows: 0, tailRows: 0, seconds: 0 };
-  for (const node of chain) {
+  for (let idx = 0; idx < chain.length; idx++) {
+    const node = chain[idx];
     const loc = epochTx.get(node.epoch);
     if (!loc) throw new Error(`no CheckpointRegistered event for epoch ${node.epoch}`);
-    const { bytes, source } = await withRetry(`epoch ${node.epoch} payload fetch`, () =>
-      fetchPayload(node.epoch, loc.txHash, node.contentHash)
-    );
+    const { bytes, source, txFrom, txBlobs } = await fetches.get(idx)!;
+    fetches.delete(idx);
+    startFetch(idx + CONCURRENCY);
     const computed = contentHashOf(bytes);
     if (computed !== node.contentHash) {
       throw new Error(
@@ -142,18 +169,14 @@ export async function restore(
     // Rebuild the blob self-view row for this checkpoint tx (its block is past
     // its own blockTo, so no envelope carries it). blobGasUsed is exact per
     // EIP-4844: blobCount * 2^17.
-    if (source === "blob") {
-      const tx = await withRetry(`tx(${loc.txHash.slice(0, 10)}…) read`, () =>
-        writeClient.getTransaction({ hash: loc.txHash })
-      );
-      const nBlobs = tx.blobVersionedHashes?.length ?? node.blobCount;
+    if (source === "blob" && txFrom) {
       store.insertBlobTxs([{
         txHash: loc.txHash,
         block: loc.block,
-        from: tx.from.toLowerCase() as Hex,
+        from: txFrom,
         to: config.registryAddress.toLowerCase() as Hex,
-        blobCount: nBlobs,
-        blobGasUsed: nBlobs * 131_072,
+        blobCount: txBlobs,
+        blobGasUsed: txBlobs * 131_072,
       }]);
     }
     // ANTI-THEATER: this line IS the demo. Real tx hash, verifiable in their
@@ -163,7 +186,6 @@ export async function restore(
         `blocks ${node.blockFrom}-${node.blockTo} ${rows} rows ` +
         `← ${source} ${loc.txHash} hash✓`
     );
-    await sleep(config.restorePaceMs);
   }
 
   // 5. Tail replay: everything after the newest checkpoint flows through the
