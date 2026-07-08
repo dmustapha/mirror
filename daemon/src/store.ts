@@ -177,22 +177,27 @@ export class Store {
   /// OHLCV from per-swap prices; timestamps estimated from the measured exact
   /// 0.750s cadence anchored to a real block timestamp (see decode.ts).
   ohlcv(pool: Hex, intervalSec: number, buckets: number, anchor: { block: number; ts: number }) {
+    // Only the last `buckets` intervals can survive the LIMIT, so bound the scan
+    // to that block window (+1 bucket margin). The correlated-subquery version of
+    // this query walked the full pool history per bucket and wedged the event
+    // loop for minutes at 1M+ rows (better-sqlite3 is synchronous).
+    const minBlock = Math.max(0, anchor.block - Math.ceil(((buckets + 1) * intervalSec) / 0.75));
     return this.db.prepare(
-      `SELECT
-         CAST((:ats - (:ablock - block) * 0.75) / :iv AS INTEGER) * :iv AS bucket_ts,
-         MIN(price_usdt_e6) AS low, MAX(price_usdt_e6) AS high,
-         (SELECT s2.price_usdt_e6 FROM swaps s2 WHERE s2.pool = swaps.pool
-            AND CAST((:ats - (:ablock - s2.block) * 0.75) / :iv AS INTEGER) =
-                CAST((:ats - (:ablock - swaps.block) * 0.75) / :iv AS INTEGER)
-            ORDER BY s2.block ASC, s2.log_index ASC LIMIT 1) AS open,
-         (SELECT s3.price_usdt_e6 FROM swaps s3 WHERE s3.pool = swaps.pool
-            AND CAST((:ats - (:ablock - s3.block) * 0.75) / :iv AS INTEGER) =
-                CAST((:ats - (:ablock - swaps.block) * 0.75) / :iv AS INTEGER)
-            ORDER BY s3.block DESC, s3.log_index DESC LIMIT 1) AS close,
-         SUM(usdt_vol_e6) AS volume_e6, COUNT(*) AS trades
-       FROM swaps WHERE pool = :pool AND price_usdt_e6 > 0
-       GROUP BY bucket_ts ORDER BY bucket_ts DESC LIMIT :buckets`
-    ).all({ pool, iv: intervalSec, buckets, ats: anchor.ts, ablock: anchor.block }) as {
+      `SELECT bucket_ts, low, high, open, close, volume_e6, trades FROM (
+         SELECT
+           CAST((:ats - (:ablock - block) * 0.75) / :iv AS INTEGER) * :iv AS bucket_ts,
+           MIN(price_usdt_e6) OVER w AS low,
+           MAX(price_usdt_e6) OVER w AS high,
+           FIRST_VALUE(price_usdt_e6) OVER (w ORDER BY block ASC, log_index ASC) AS open,
+           FIRST_VALUE(price_usdt_e6) OVER (w ORDER BY block DESC, log_index DESC) AS close,
+           SUM(usdt_vol_e6) OVER w AS volume_e6,
+           COUNT(*) OVER w AS trades,
+           ROW_NUMBER() OVER (w ORDER BY block ASC, log_index ASC) AS rn
+         FROM swaps
+         WHERE pool = :pool AND price_usdt_e6 > 0 AND block >= :minBlock
+         WINDOW w AS (PARTITION BY CAST((:ats - (:ablock - block) * 0.75) / :iv AS INTEGER))
+       ) WHERE rn = 1 ORDER BY bucket_ts DESC LIMIT :buckets`
+    ).all({ pool, iv: intervalSec, buckets, ats: anchor.ts, ablock: anchor.block, minBlock }) as {
       bucket_ts: number; low: number; high: number; open: number; close: number;
       volume_e6: number; trades: number;
     }[];
@@ -261,7 +266,6 @@ function rowToTransfer(r: any): TransferRow {
 /// USDT-side absolute volume in e6 units for a swap (0 when pool has no USDT leg).
 /// Safe as a JS number: single-swap USDT amounts are far below 2^53.
 export function usdtVolumeE6(s: SwapRow): number {
-  const usdt = config.usdt.toLowerCase();
   // pool token ordering is stored in pools table; amount0 is the token0 delta.
   // We tag USDT side at decode time by convention: decode.ts guarantees
   // priceUsdtE6 > 0 only for pools with a USDT leg, and amount sign carries it.

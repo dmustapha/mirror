@@ -169,9 +169,10 @@ export async function buildApi(store: Store, ingestor: Ingestor) {
   /// Blob self-view (depth item c): every type-3 tx the chain has ever seen —
   /// which, on BOT Chain, is Mirror's own checkpoints.
   app.get("/blobs", async () => {
-    const head = store.lastIndexedBlock;
     const reg = config.registryAddress.toLowerCase();
-    return store.blobTxsInRange(0, head + 1_000).map((b) => ({
+    // DEV-006: checkpoint blob txs carry WRITE-chain block numbers, which run
+    // ahead of the read-chain head — bounding by lastIndexedBlock hid them all.
+    return store.blobTxsInRange(0, Number.MAX_SAFE_INTEGER).map((b) => ({
       ...b,
       // DEV-006: our checkpoint blob txs live on the write chain; anything else
       // (none in mainnet history, measured) is a read-chain tx.
