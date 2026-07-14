@@ -10,6 +10,10 @@ Mirror decodes BOT Chain DEX activity into a queryable database, then periodical
 
 ![Overview](docs/images/overview.png)
 
+## Live Demo
+**[mirror-indexer.vercel.app](https://mirror-indexer.vercel.app)**
+Explore decoded DEX activity across auto-discovered pools. The dashboard shows live swap data, OHLCV charts, checkpoint history, and blob transaction activity, all backed by the daemon running at `mirror-psel.onrender.com`.
+
 ## What Is Mirror?
 
 Indexers die. Databases get wiped, servers lapse, and every DEX dashboard you rely on is one missed invoice away from a blank page. Mirror treats the chain itself as the backup medium: the same BOT Chain that produced the swap events also carries compressed, hash-verified checkpoints of the decoded database inside EIP-4844 blob transactions. Anyone can run `npm run restore` and re-derive the entire query layer from public chain data, verifying every byte against on-chain content hashes.
