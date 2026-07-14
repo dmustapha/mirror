@@ -20,3 +20,13 @@ web/next-env.d.ts
 *.db
 *.db-shm
 *.db-wal
+
+# Deploy artifacts
+.vercel
+*.backup
+*.backup2
+
+# Python
+__pycache__/
+*.pyc
+.venv/
