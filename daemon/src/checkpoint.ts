@@ -243,6 +243,10 @@ export class CheckpointEngine {
       const { env, bytes, end } = this.fitSegment(from, safeHead);
       // Not enough pending data for a full segment AND nothing was clipped:
       // leave it to the rolling HEAD.
+      console.log(
+        `[checkpoint:debug] closeSegments from=${from} safeHead=${safeHead} bytes=${bytes.length} end=${end} ` +
+        `swaps=${this.store.counts().swaps} segmentedThrough=${this.store.segmentedThrough}`
+      );
       if (bytes.length < config.segmentTargetBytes && end === safeHead) return;
       await this.register(env, bytes);
       this.store.segmentedThrough = end;
