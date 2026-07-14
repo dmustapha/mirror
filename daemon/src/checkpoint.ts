@@ -191,6 +191,7 @@ export class CheckpointEngine {
   /// a slow blob send never overlaps the next tick, and ticks that arrive
   /// mid-send are simply dropped (the next one re-evaluates from store state).
   async tick(safeHead: number): Promise<void> {
+    console.log(`[checkpoint:tick] called with safeHead=${safeHead} busy=${this.busy} initialized=${this.initialized}`);
     if (this.busy) return;
     if (!config.registryAddress) return; // pre-deploy: index-only mode
     this.busy = true;

@@ -59,11 +59,16 @@ export class Ingestor extends EventEmitter {
 
   /// Index [from, to] inclusive. Chunked, paced, idempotent. Used by backfill,
   /// tail, and restore-tail identically.
-  async indexRange(from: number, to: number): Promise<void> {
+  async indexRange(
+    from: number,
+    to: number,
+    onChunk?: (chunkEnd: number) => Promise<void>,
+  ): Promise<void> {
     for (let a = from; a <= to; a += config.backfillChunkBlocks) {
       const b = Math.min(a + config.backfillChunkBlocks - 1, to);
       await this.indexChunk(a, b);
       this.store.lastIndexedBlock = b;
+      if (onChunk) await onChunk(b);
       if (b < to) await sleep(config.backfillPaceMs);
     }
   }
@@ -180,8 +185,7 @@ export class Ingestor extends EventEmitter {
           if (safeHead - from > 1000) {
             console.log(`[ingest] backfill ${from} → ${safeHead} (${safeHead - from + 1} blocks)`);
           }
-          await this.indexRange(from, safeHead);
-          if (onRangeIndexed) await onRangeIndexed(safeHead);
+          await this.indexRange(from, safeHead, onRangeIndexed);
         }
         if (Date.now() - lastAnchorRefresh > 60_000) {
           await this.refreshTsAnchor();
