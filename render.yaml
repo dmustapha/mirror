@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: mirror-daemon
+    runtime: docker
+    rootDir: daemon
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /status
+    envVars:
+      - key: RPC_URL
+        value: https://rpc.botchain.ai
+      - key: WSS_URL
+        value: wss://ws-rpc.botchain.ai
+      - key: WRITE_RPC_URL
+        value: https://rpc.bohr.life
+      - key: WRITE_CHAIN_ID
+        value: "968"
+      - key: WRITE_EXPLORER_BASE
+        value: https://scan.botchain.ai
+      - key: REGISTRY_ADDRESS
+        value: "0x6460389f70B59c0503186494534e911F181bD911"
+      - key: REGISTRY_DEPLOY_BLOCK
+        value: "15492396"
+      - key: DB_PATH
+        value: data/mirror.db
+      - key: START_BLOCK
+        value: "1066273"
+      - key: INDEX_USDT
+        value: "1"
+      - key: CHECKPOINT_MODE
+        value: blob
+      - key: API_PORT
+        value: "3400"
