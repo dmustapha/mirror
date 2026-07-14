@@ -191,7 +191,6 @@ export class CheckpointEngine {
   /// a slow blob send never overlaps the next tick, and ticks that arrive
   /// mid-send are simply dropped (the next one re-evaluates from store state).
   async tick(safeHead: number): Promise<void> {
-    console.log(`[checkpoint:tick] called with safeHead=${safeHead} busy=${this.busy} initialized=${this.initialized}`);
     if (this.busy) return;
     if (!config.registryAddress) return; // pre-deploy: index-only mode
     this.busy = true;
@@ -244,10 +243,6 @@ export class CheckpointEngine {
       const { env, bytes, end } = this.fitSegment(from, safeHead);
       // Not enough pending data for a full segment AND nothing was clipped:
       // leave it to the rolling HEAD.
-      console.log(
-        `[checkpoint:debug] closeSegments from=${from} safeHead=${safeHead} bytes=${bytes.length} end=${end} ` +
-        `swaps=${this.store.counts().swaps} segmentedThrough=${this.store.segmentedThrough}`
-      );
       if (bytes.length < config.segmentTargetBytes && end === safeHead) return;
       await this.register(env, bytes);
       this.store.segmentedThrough = end;
