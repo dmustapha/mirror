@@ -18,9 +18,9 @@ services:
       - key: WRITE_EXPLORER_BASE
         value: https://scan.botchain.ai
       - key: REGISTRY_ADDRESS
-        value: "0x6460389f70B59c0503186494534e911F181bD911"
+        value: "0xf2943580DABc1dd5eD417a5DC58D35110640BB2f"
       - key: REGISTRY_DEPLOY_BLOCK
-        value: "15492396"
+        value: "16292760"
       - key: DB_PATH
         value: data/mirror.db
       - key: START_BLOCK
